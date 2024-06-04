@@ -8,8 +8,7 @@ UserInterface::UserInterface()
 {
 	cities = vector<string>();
 	loadFutures = vector<future<void>>();
-
-	
+	data = vector<Data>();
 }
 
 UserInterface::~UserInterface()
@@ -50,7 +49,7 @@ void UserInterface::GetCitiesNames()
 	}
 }
 
-void UserInterface::GetWeatherConditions(string cityName)
+void UserInterface::GetWeatherConditions(string cityName, Data& actualData)
 {
 	uri_builder uriBuilder = uri_builder(to_string_t("/weather"));
 
@@ -66,7 +65,7 @@ void UserInterface::GetWeatherConditions(string cityName)
 	responseTask.wait();
 	http_response response = responseTask.get();
 
-	cout << "Loading weather..." << endl;
+	cout << "Loading weather..." << endl << endl;
 
 	if (response.status_code() != 200)
 	{
@@ -76,35 +75,63 @@ void UserInterface::GetWeatherConditions(string cityName)
 	{
 		json::value json = response.extract_json().get();
 
-		string cityName = to_utf8string(json[to_string_t("name")].as_string());
+		actualData.cityName = to_utf8string(json[to_string_t("name")].as_string());
 
-		string weather = to_utf8string(json[to_string_t("weather")][0][to_string_t("main")].as_string());
+		actualData.weather = to_utf8string(json[to_string_t("weather")][0][to_string_t("main")].as_string());
 
-		float temperature = json[to_string_t("main")][to_string_t("temp")].as_double();
-		temperature -= 273.15f;
+		actualData.temperature = json[to_string_t("main")][to_string_t("temp")].as_double();
+		actualData.temperature -= 273.15f;
 
-		float feelsLike = json[to_string_t("main")][to_string_t("feels_like")].as_double();
-		feelsLike -= 273.15f;
+		actualData.feelsLike = json[to_string_t("main")][to_string_t("feels_like")].as_double();
+		actualData.feelsLike -= 273.15f;
 
-		float humidity = json[to_string_t("main")][to_string_t("humidity")].as_double();
-
-		cout << "Weather in " << cityName << endl << endl;
-
-		cout << "Weather: " << weather << endl;
-		cout << "Temperature: " << temperature << " C" << endl;
-		cout << "Feels like: " << feelsLike << " C" << endl;
-		cout << "Humidity : " << humidity << "%" << endl << endl << endl;
+		actualData.humidity = json[to_string_t("main")][to_string_t("humidity")].as_double();
 	}
 
-	this_thread::sleep_for(chrono::milliseconds(1000));
+	//this_thread::sleep_for(chrono::milliseconds(1000));
 }
 
 void UserInterface::LoadFutures()
 {
-	
 	for (int i = 0; i < cities.size(); i++)
 	{
-		loadFutures.push_back(async(launch::async, [this, i] {this->GetWeatherConditions(cities[i]);}));
+		Data newData;
+		data.push_back(newData);
+
+		loadFutures.push_back(async(launch::async, [this, i] {this->GetWeatherConditions(cities[i], data[i]); }));
+	}
+
+	bool isLoading = true;
+
+	while (isLoading)
+	{
+		isLoading = false;
+
+		for (int i = 0; i < cities.size(); i++)
+		{
+			future_status status = loadFutures[i].wait_for(chrono::milliseconds(1));
+
+			if (status != future_status::ready)
+			{
+				isLoading = true;
+			}
+		}
+	}
+
+	ShowData();
+}
+
+void UserInterface::ShowData()
+{
+	//system("cls");
+
+	for (int i = 0; i < data.size(); i++)
+	{
+		cout << "Weather in " << data[i].cityName << endl;
+		cout << "Weather: " << data[i].weather << endl;
+		cout << "Temperature: " << data[i].temperature << " C" << endl;
+		cout << "Feels like: " << data[i].feelsLike << " C" << endl;
+		cout << "Humidity : " << data[i].humidity << "%" << endl << endl << endl;
 	}
 }
 
